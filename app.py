@@ -1,13 +1,12 @@
 import os
 import requests
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 app = FastAPI()
 
-# Configurar CORS para permitir peticiones desde cualquier origen (Frontend web)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Almacenamiento en memoria para el último reporte del nodo
 latest_metrics = {
     "hostname": "Sin datos",
     "ip": "--",
@@ -26,11 +24,13 @@ latest_metrics = {
     "docker_status": "Esperando conexión...",
 }
 
-# Credenciales de Telegram (puedes cambiarlas cuando tengas tu propio bot)
-TELEGRAM_TOKEN = "8933668095:AAE9MQWYr5k9TLa_DUa_aFxYGI7rgRXghHI"
-CHAT_ID = "8206383761"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
+SERVER_API_KEY = os.getenv("SERVER_API_KEY", "nodepulse_secreto_2026")
 
 def send_telegram_alert(message):
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
@@ -40,7 +40,7 @@ def send_telegram_alert(message):
         }
         requests.post(url, json=payload, timeout=5)
     except Exception as e:
-        print(f"Error enviando alerta de Telegram: {e}")
+        print(f"Error enviando alerta: {e}")
 
 class MetricsModel(BaseModel):
     hostname: str
@@ -51,14 +51,14 @@ class MetricsModel(BaseModel):
     docker_status: str
 
 @app.post("/api/metrics")
-def receive_metrics(metrics: MetricsModel):
+def receive_metrics(metrics: MetricsModel, x_api_key: str = Header(None)):
+    if x_api_key != SERVER_API_KEY:
+        raise HTTPException(status_code=403, detail="No autorizado: API Key incorrecta")
+
     global latest_metrics
     latest_metrics = metrics.dict()
     
-    # Análisis Inteligente de Alertas
     alerts = []
-    
-    # 1. Verificar temperatura CPU (ej. "58°C" -> 58.0)
     try:
         temp_val = float(metrics.cpu_temp.replace("°C", "").strip())
         if temp_val > 70.0:
@@ -66,7 +66,6 @@ def receive_metrics(metrics: MetricsModel):
     except ValueError:
         pass
 
-    # 2. Verificar RAM (ej. "24.1%" -> 24.1)
     try:
         ram_val = float(metrics.ram_usage.replace("%", "").strip())
         if ram_val > 90.0:
@@ -74,12 +73,11 @@ def receive_metrics(metrics: MetricsModel):
     except ValueError:
         pass
 
-    # Si se detecta alguna anomalía, disparar notificación a Telegram
     if alerts:
         alert_msg = "\n".join(alerts)
         send_telegram_alert(alert_msg)
 
-    return {"status": "success", "message": "Métricas recibidas y analizadas"}
+    return {"status": "success", "message": "Métricas recibidas de forma segura"}
 
 @app.get("/api/metrics")
 def get_metrics():
@@ -91,4 +89,4 @@ def read_root():
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        return "<h3>NodePulse API está en línea. Usa /api/metrics</h3>"
+        return "<h3>NodePulse API Segura</h3>"
