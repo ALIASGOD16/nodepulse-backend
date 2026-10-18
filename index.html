@@ -81,15 +81,15 @@
                 <div class="grid grid-cols-3 gap-6 text-center border-y lg:border-y-0 lg:border-x border-slate-800 py-4 lg:py-0 lg:px-8">
                     <div>
                         <p class="text-xs text-slate-400">Temperatura CPU</p>
-                        <p id="cpu-temp" class="text-lg font-bold text-slate-200">50°C</p>
+                        <p id="cpu-temp" class="text-lg font-bold text-slate-200">--°C</p>
                     </div>
                     <div>
                         <p class="text-xs text-slate-400">Memoria RAM</p>
-                        <p id="ram-usage" class="text-lg font-bold text-slate-200">24.1%</p>
+                        <p id="ram-usage" class="text-lg font-bold text-slate-200">--%</p>
                     </div>
                     <div>
                         <p class="text-xs text-slate-400">Espacio en Disco</p>
-                        <p id="disk-usage" class="text-lg font-bold text-slate-200">41%</p>
+                        <p id="disk-usage" class="text-lg font-bold text-slate-200">--%</p>
                     </div>
                 </div>
 
@@ -97,12 +97,9 @@
                 <div class="flex items-center justify-between lg:justify-end space-x-6">
                     <div class="space-y-1">
                         <p class="text-xs text-slate-400">Servicios Docker</p>
-                        <div class="flex space-x-2">
-                            <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium px-2 py-0.5 rounded">
-                                repocket: UP
-                            </span>
-                            <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium px-2 py-0.5 rounded">
-                                traffmonetizer: UP
+                        <div id="docker-container" class="flex space-x-2">
+                            <span class="bg-slate-800 text-slate-400 text-xs font-medium px-2 py-0.5 rounded">
+                                Cargando...
                             </span>
                         </div>
                     </div>
@@ -115,5 +112,37 @@
 
     </main>
 
+    <!-- Conexión en vivo con Render -->
+    <script>
+        async function updateDashboard() {
+            try {
+                const response = await fetch('https://nodepulse-api.onrender.com/api/metrics');
+                const data = await response.json();
+
+                if (data.hostname && data.hostname !== "Sin datos") {
+                    document.getElementById('host-name').innerText = data.hostname;
+                    document.getElementById('host-ip').innerText = data.ip;
+                    document.getElementById('cpu-temp').innerText = data.cpu_temp;
+                    document.getElementById('ram-usage').innerText = data.ram_usage;
+                    document.getElementById('disk-usage').innerText = data.disk_usage;
+
+                    // Formatear el estado de Docker
+                    if (data.docker_status) {
+                        const services = data.docker_status.split(',').filter(Boolean);
+                        const dockerHTML = services.map(srv => 
+                            `<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium px-2 py-0.5 rounded">${srv.trim()}</span>`
+                        ).join(' ');
+                        document.getElementById('docker-container').innerHTML = dockerHTML || '<span class="text-xs text-slate-400">Sin contenedores</span>';
+                    }
+                }
+            } catch (error) {
+                console.log("Conectando con la API en Render...", error);
+            }
+        }
+
+        // Actualizar cada 5 segundos
+        setInterval(updateDashboard, 5000);
+        updateDashboard();
+    </script>
 </body>
 </html>
